@@ -3,6 +3,7 @@ Agente LLM autônomo, robusto, didático, funcional, com contexto persistente.
 
 # Estrutura do projeto
 
+```
 context-agent-llm/
 │
 ├── README.md
@@ -25,3 +26,4 @@ context-agent-llm/
 └── tests/
     ├── __init__.py
     └── test_agent.py
+```
