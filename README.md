@@ -16,6 +16,10 @@ Este projeto demonstra um agente inteligente que mantém conversas com memória 
 
 ---
 
+![Arquitetura](images/ChatGPT%20Image%2022%20de%20jul.%20de%202025%2C%2008_14_22.png)
+
+...
+
 ## Estrutura de Pastas
 
 ```
