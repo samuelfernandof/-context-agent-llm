@@ -1,5 +1,4 @@
-# -context-agent-llm
-Agente LLM autônomo, robusto, didático, funcional, com contexto persistente.
+# Agente funcional, com contexto persistente
 
 # Estrutura do projeto
 
