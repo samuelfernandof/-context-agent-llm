@@ -1,4 +1,4 @@
-# Agente funcional, com contexto persistente
+# Agente funcional com contexto persistente
 
 Este projeto demonstra um agente inteligente que mantém conversas com memória de longo prazo, executa funções estruturadas, registra logs confiáveis e utiliza boas práticas de programação funcional e tipagem forte.
 
