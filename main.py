@@ -415,3 +415,404 @@ def validate_environment_command(args: argparse.Namespace) -> int:
         
         if validation_result.success:
             data = validation_result.data
+            
+            print("✅ Validação do ambiente concluída com sucesso!")
+            
+            if data.get("warnings"):
+                print("\n⚠️  Avisos encontrados:")
+                for warning in data["warnings"]:
+                    print(f"  • {warning}")
+            else:
+                print("🎉 Nenhum problema detectado!")
+            
+            return 0
+        else:
+            data = validation_result.data
+            
+            print("❌ Problemas encontrados no ambiente:")
+            for error in data["errors"]:
+                print(f"  • {error}")
+            
+            if data.get("warnings"):
+                print("\n⚠️  Avisos adicionais:")
+                for warning in data["warnings"]:
+                    print(f"  • {warning}")
+            
+            return 1
+            
+    except Exception as e:
+        print(f"❌ Erro na validação: {str(e)}")
+        return 1
+
+def export_config_command(args: argparse.Namespace) -> int:
+    """
+    Exporta configuração padrão para arquivo.
+    Função utilitária de configuração.
+    """
+    try:
+        config = AgentConfig()
+        config_path = args.export_config
+        
+        print(f"📤 Exportando configuração padrão para: {config_path}")
+        
+        save_result = save_config_to_file(config, config_path)
+        
+        if save_result.success:
+            print(f"✅ {save_result.data}")
+            print("\n💡 Você pode editar este arquivo e usar com --config")
+            return 0
+        else:
+            print(f"❌ {save_result.error}")
+            return 1
+            
+    except Exception as e:
+        print(f"❌ Erro ao exportar configuração: {str(e)}")
+        return 1
+
+# ============================================================================
+# FUNÇÃO PRINCIPAL
+# ============================================================================
+
+def main() -> int:
+    """
+    Função principal do script.
+    Processa argumentos e executa ação apropriada.
+    """
+    try:
+        # Parsear argumentos
+        parser = create_argument_parser()
+        args = parser.parse_args()
+        
+        # Configurar nível de logging baseado em verbose/quiet
+        logger = get_logger()
+        
+        # Comandos utilitários (executam e saem)
+        if args.stats:
+            return show_stats(args)
+        
+        if args.backup_memory is not None:
+            return backup_memory_command(args)
+        
+        if args.list_sessions:
+            return list_sessions_command(args)
+        
+        if args.validate_env:
+            return validate_environment_command(args)
+        
+        if args.export_config:
+            return export_config_command(args)
+        
+        # Validar ambiente antes de continuar
+        if not args.quiet:
+            print("🔍 Validando ambiente...")
+        
+        validation_result = validate_environment()
+        if not validation_result.success:
+            if not args.quiet:
+                print("❌ Problemas no ambiente:")
+                for error in validation_result.data["errors"]:
+                    print(f"  • {error}")
+            return 1
+        
+        # Mostrar warnings se não estiver em modo quiet
+        if not args.quiet and validation_result.data.get("warnings"):
+            print("⚠️  Avisos:")
+            for warning in validation_result.data["warnings"]:
+                print(f"  • {warning}")
+            print()
+        
+        # Carregar configuração
+        config = None
+        
+        if args.config:
+            # Carregar de arquivo
+            if not args.quiet:
+                print(f"📋 Carregando configuração de: {args.config}")
+            
+            config_result = load_config_from_file(args.config)
+            if not config_result.success:
+                print(f"❌ Erro ao carregar configuração: {config_result.error}")
+                return 1
+            
+            config = config_result.data
+        else:
+            # Construir a partir dos argumentos
+            config = build_config_from_args(args)
+        
+        # Validar configuração
+        config_validation = config.validate()
+        if not config_validation.success:
+            print(f"❌ Configuração inválida: {config_validation.error}")
+            return 1
+        
+        # Criar agente baseado no modo
+        agent = None
+        
+        if args.dev:
+            if not args.quiet:
+                print("🔧 Criando agente em modo desenvolvimento...")
+            agent = create_development_agent(args.session_id)
+            
+        elif args.prod:
+            if not args.quiet:
+                print("🏭 Criando agente em modo produção...")
+            agent = create_production_agent(args.session_id)
+            
+        else:
+            # Criar agente com configuração personalizada
+            if not args.quiet:
+                print("🤖 Criando agente personalizado...")
+            
+            agent = FunctionalAgent(config, args.session_id)
+        
+        # Log inicial se verbose
+        if args.verbose:
+            logger.log_info(
+                "Agente criado via linha de comando",
+                model=config.model,
+                session_id=agent.session_id,
+                memory_enabled=config.enable_memory_persistence,
+                tools_enabled=config.enable_function_calling
+            )
+        
+        # Iniciar conversa
+        if not args.quiet:
+            print("🚀 Iniciando agente...")
+            print()
+        
+        agent.start_conversation()
+        
+        return 0
+        
+    except KeyboardInterrupt:
+        if not args.quiet:
+            print("\n🛑 Interrompido pelo usuário.")
+        return 130  # Código padrão para SIGINT
+        
+    except Exception as e:
+        print(f"❌ Erro fatal: {str(e)}")
+        
+        # Log do erro se possível
+        try:
+            get_logger().log_error(f"Erro fatal no main: {str(e)}")
+        except:
+            pass  # Falha silenciosa no logging
+        
+        return 1
+
+# ============================================================================
+# FUNÇÕES DE CONVENIÊNCIA PARA IMPORTAÇÃO
+# ============================================================================
+
+def create_agent_from_args(args: list = None) -> FunctionalAgent:
+    """
+    Cria agente a partir de argumentos da linha de comando.
+    Útil para uso programático.
+    
+    Args:
+        args: Lista de argumentos (padrão: sys.argv[1:])
+    
+    Returns:
+        FunctionalAgent configurado
+    """
+    if args is None:
+        args = sys.argv[1:]
+    
+    parser = create_argument_parser()
+    parsed_args = parser.parse_args(args)
+    
+    # Validar ambiente
+    validation_result = validate_environment()
+    if not validation_result.success:
+        raise RuntimeError(f"Ambiente inválido: {validation_result.data['errors']}")
+    
+    # Construir configuração
+    if parsed_args.config:
+        config_result = load_config_from_file(parsed_args.config)
+        if not config_result.success:
+            raise ValueError(f"Erro na configuração: {config_result.error}")
+        config = config_result.data
+    else:
+        config = build_config_from_args(parsed_args)
+    
+    # Validar configuração
+    config_validation = config.validate()
+    if not config_validation.success:
+        raise ValueError(f"Configuração inválida: {config_validation.error}")
+    
+    # Criar agente apropriado
+    if parsed_args.dev:
+        return create_development_agent(parsed_args.session_id)
+    elif parsed_args.prod:
+        return create_production_agent(parsed_args.session_id)
+    else:
+        return FunctionalAgent(config, parsed_args.session_id)
+
+def run_agent_with_config(config_path: str, session_id: Optional[str] = None) -> None:
+    """
+    Executa agente com arquivo de configuração.
+    Função de conveniência para uso programático.
+    """
+    # Carregar configuração
+    config_result = load_config_from_file(config_path)
+    if not config_result.success:
+        raise ValueError(f"Erro ao carregar configuração: {config_result.error}")
+    
+    config = config_result.data
+    
+    # Validar configuração
+    config_validation = config.validate()
+    if not config_validation.success:
+        raise ValueError(f"Configuração inválida: {config_validation.error}")
+    
+    # Criar e executar agente
+    agent = FunctionalAgent(config, session_id)
+    agent.start_conversation()
+
+def interactive_setup() -> AgentConfig:
+    """
+    Setup interativo para configuração do agente.
+    Útil para usuários iniciantes.
+    """
+    print("🎯 Setup Interativo do Agente Funcional")
+    print("=" * 40)
+    print()
+    
+    # API Key
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        print("🔑 API Key não encontrada no ambiente.")
+        api_key = input("Digite sua chave da API OpenRouter: ").strip()
+        if not api_key:
+            raise ValueError("API Key é obrigatória")
+    else:
+        print(f"✅ API Key encontrada: {api_key[:8]}...")
+    
+    # Modelo
+    print("\n🧠 Modelos disponíveis:")
+    models = [
+        ("mistralai/mistral-7b-instruct", "Mistral 7B (rápido, econômico)"),
+        ("openai/gpt-3.5-turbo", "GPT-3.5 Turbo (balanceado)"),
+        ("openai/gpt-4", "GPT-4 (melhor qualidade, mais caro)"),
+        ("anthropic/claude-3-sonnet", "Claude 3 Sonnet (criativo)"),
+    ]
+    
+    for i, (model, desc) in enumerate(models, 1):
+        print(f"  {i}. {model} - {desc}")
+    
+    while True:
+        try:
+            choice = input(f"\nEscolha o modelo (1-{len(models)}) [1]: ").strip()
+            if not choice:
+                choice = "1"
+            
+            model_index = int(choice) - 1
+            if 0 <= model_index < len(models):
+                selected_model = models[model_index][0]
+                break
+            else:
+                print("❌ Opção inválida!")
+        except ValueError:
+            print("❌ Digite um número válido!")
+    
+    # Temperatura
+    while True:
+        try:
+            temp_input = input("\n🌡️  Temperature (0.0-2.0) [0.7]: ").strip()
+            if not temp_input:
+                temperature = 0.7
+                break
+            
+            temperature = float(temp_input)
+            if 0.0 <= temperature <= 2.0:
+                break
+            else:
+                print("❌ Temperature deve estar entre 0.0 e 2.0!")
+        except ValueError:
+            print("❌ Digite um número válido!")
+    
+    # Memória
+    enable_memory = input("\n💾 Habilitar memória persistente? (S/n) [S]: ").strip().lower()
+    enable_memory = enable_memory != 'n'
+    
+    # Ferramentas
+    enable_tools = input("\n🛠️  Habilitar ferramentas/funções? (S/n) [S]: ").strip().lower()
+    enable_tools = enable_tools != 'n'
+    
+    # Criar configuração
+    config = AgentConfig(
+        model=selected_model,
+        api_key=api_key,
+        temperature=temperature,
+        enable_memory_persistence=enable_memory,
+        enable_function_calling=enable_tools
+    )
+    
+    print("\n✅ Configuração criada com sucesso!")
+    print(f"   🧠 Modelo: {config.model}")
+    print(f"   🌡️  Temperature: {config.temperature}")
+    print(f"   💾 Memória: {'✅' if config.enable_memory_persistence else '❌'}")
+    print(f"   🛠️  Ferramentas: {'✅' if config.enable_function_calling else '❌'}")
+    
+    # Salvar configuração
+    save_config = input("\n💾 Salvar configuração em arquivo? (s/N) [N]: ").strip().lower()
+    if save_config in ['s', 'sim', 'yes', 'y']:
+        config_path = input("Nome do arquivo [agent_config.json]: ").strip()
+        if not config_path:
+            config_path = "agent_config.json"
+        
+        save_result = save_config_to_file(config, config_path)
+        if save_result.success:
+            print(f"✅ Configuração salva em: {config_path}")
+        else:
+            print(f"❌ Erro ao salvar: {save_result.error}")
+    
+    return config
+
+# ============================================================================
+# COMPATIBILIDADE COM CÓDIGO LEGADO
+# ============================================================================
+
+def main_agent():
+    """
+    Função de compatibilidade com o código legado.
+    Redireciona para a função principal.
+    """
+    return main()
+
+# ============================================================================
+# TRATAMENTO DE SINAIS (UNIX)
+# ============================================================================
+
+def setup_signal_handlers():
+    """
+    Configura handlers para sinais do sistema (UNIX only).
+    Permite encerramento gracioso.
+    """
+    import signal
+    
+    def signal_handler(signum, frame):
+        print(f"\n🛑 Sinal {signum} recebido. Encerrando graciosamente...")
+        sys.exit(0)
+    
+    # Capturar sinais comuns
+    signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
+    signal.signal(signal.SIGTERM, signal_handler)  # kill
+    
+    if hasattr(signal, 'SIGHUP'):
+        signal.signal(signal.SIGHUP, signal_handler)   # Terminal fechado
+
+# ============================================================================
+# PONTO DE ENTRADA
+# ============================================================================
+
+if __name__ == "__main__":
+    # Configurar handlers de sinal em sistemas Unix
+    try:
+        setup_signal_handlers()
+    except:
+        pass  # Ignorar em Windows ou outros sistemas
+    
+    # Executar função principal
+    exit_code = main()
+    sys.exit(exit_code)
