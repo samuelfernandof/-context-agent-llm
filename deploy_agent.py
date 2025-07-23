@@ -4,7 +4,7 @@ DeployContextAgent - Agente Especializado em Deploy
 ==================================================
 
 Exemplo de como usar nossa arquitetura funcional para criar
-um agente especializado em deploy, exatamente como na imagem.
+um agente especializado em deploy.
 
 Funcionalidades:
 - Processa mensagens do Slack
