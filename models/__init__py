@@ -1,1 +1,818 @@
+"""
+Models Package - Estruturas de Dados Imutáveis
+===============================================
 
+Este pacote define todas as estruturas de dados imutáveis utilizadas
+pelo sistema de agente funcional, seguindo princípios de:
+
+- Imutabilidade (frozen dataclasses)
+- Tipagem forte (type hints + Literal)
+- Funções puras de transformação
+- Serialização/deserialização consistente
+- Padrões funcionais (Result monad)
+
+Componentes principais:
+- Message: Mensagens da conversa
+- Thread: Estado completo da conversa
+- ToolCall: Chamadas de ferramentas
+- Event: Eventos do sistema
+- Result: Tipo de resultado funcional
+
+Exemplo de uso:
+    >>> from models import Message, Thread, Result
+    >>> message = Message(role="user", content="Olá!")
+    >>> thread = Thread().add_message(message)
+    >>> result = Result.ok(thread)
+"""
+
+# ============================================================================
+# VERSÃO E METADADOS
+# ============================================================================
+
+__version__ = "1.0.0"
+__author__ = "Agente Funcional Team"
+__description__ = "Estruturas de dados imutáveis para o sistema de agente"
+
+# ============================================================================
+# IMPORTAÇÕES PRINCIPAIS
+# ============================================================================
+
+from .models import (
+    # Tipos literais e enums
+    MessageRole,
+    EventType,
+    ToolCallStatus,
+    
+    # Estruturas principais
+    Message,
+    ToolCall,
+    Event,
+    Thread,
+    Result,
+    
+    # Métodos de classe úteis já incluídos nas classes
+)
+
+# ============================================================================
+# FUNÇÕES DE CONVENIÊNCIA
+# ============================================================================
+
+def create_user_message(content: str) -> Message:
+    """
+    Cria mensagem do usuário de forma conveniente.
+    
+    Args:
+        content: Conteúdo da mensagem
+    
+    Returns:
+        Message com role="user"
+    
+    Example:
+        >>> msg = create_user_message("Como você está?")
+        >>> print(msg.role)  # "user"
+    """
+    return Message(role="user", content=content)
+
+def create_assistant_message(content: str) -> Message:
+    """
+    Cria mensagem do assistente de forma conveniente.
+    
+    Args:
+        content: Conteúdo da mensagem
+    
+    Returns:
+        Message com role="assistant"
+    
+    Example:
+        >>> msg = create_assistant_message("Estou bem, obrigado!")
+        >>> print(msg.role)  # "assistant"
+    """
+    return Message(role="assistant", content=content)
+
+def create_system_message(content: str) -> Message:
+    """
+    Cria mensagem do sistema de forma conveniente.
+    
+    Args:
+        content: Conteúdo da mensagem
+    
+    Returns:
+        Message com role="system"
+    
+    Example:
+        >>> msg = create_system_message("Você é um assistente útil.")
+        >>> print(msg.role)  # "system"
+    """
+    return Message(role="system", content=content)
+
+def create_function_message(name: str, content: str) -> Message:
+    """
+    Cria mensagem de função de forma conveniente.
+    
+    Args:
+        name: Nome da função
+        content: Resultado da função
+    
+    Returns:
+        Message com role="function"
+    
+    Example:
+        >>> msg = create_function_message("calculate", "42")
+        >>> print(msg.name)  # "calculate"
+    """
+    return Message(role="function", name=name, content=content)
+
+def create_empty_thread(session_id: str = None) -> Thread:
+    """
+    Cria thread vazia de forma conveniente.
+    
+    Args:
+        session_id: ID da sessão (opcional)
+    
+    Returns:
+        Thread vazia
+    
+    Example:
+        >>> thread = create_empty_thread("session_123")
+        >>> print(len(thread.messages))  # 0
+    """
+    if session_id:
+        return Thread(session_id=session_id)
+    else:
+        return Thread()
+
+def create_conversation_thread(*messages: Message, session_id: str = None) -> Thread:
+    """
+    Cria thread com mensagens iniciais.
+    
+    Args:
+        *messages: Mensagens para adicionar
+        session_id: ID da sessão (opcional)
+    
+    Returns:
+        Thread com mensagens
+    
+    Example:
+        >>> user_msg = create_user_message("Oi!")
+        >>> assistant_msg = create_assistant_message("Olá!")
+        >>> thread = create_conversation_thread(user_msg, assistant_msg)
+        >>> print(len(thread.messages))  # 2
+    """
+    thread = create_empty_thread(session_id)
+    
+    for message in messages:
+        thread = thread.add_message(message)
+    
+    return thread
+
+def create_info_event(message: str, **data) -> Event:
+    """
+    Cria evento de informação de forma conveniente.
+    
+    Args:
+        message: Mensagem do evento
+        **data: Dados adicionais
+    
+    Returns:
+        Event com type="system"
+    
+    Example:
+        >>> event = create_info_event("Sistema iniciado", version="1.0")
+        >>> print(event.type)  # "system"
+    """
+    return Event(
+        type="system",
+        data={"message": message, **data}
+    )
+
+def create_error_event(error: str, **data) -> Event:
+    """
+    Cria evento de erro de forma conveniente.
+    
+    Args:
+        error: Mensagem de erro
+        **data: Dados adicionais
+    
+    Returns:
+        Event com type="error"
+    
+    Example:
+        >>> event = create_error_event("Falha na conexão", code=500)
+        >>> print(event.type)  # "error"
+    """
+    return Event(
+        type="error",
+        data={"error": error, **data}
+    )
+
+# ============================================================================
+# UTILITÁRIOS DE VALIDAÇÃO
+# ============================================================================
+
+def is_valid_message_role(role: str) -> bool:
+    """
+    Verifica se um role de mensagem é válido.
+    
+    Args:
+        role: Role a verificar
+    
+    Returns:
+        True se válido
+    
+    Example:
+        >>> is_valid_message_role("user")  # True
+        >>> is_valid_message_role("invalid")  # False
+    """
+    valid_roles = {"system", "user", "assistant", "function"}
+    return role in valid_roles
+
+def is_valid_event_type(event_type: str) -> bool:
+    """
+    Verifica se um type de evento é válido.
+    
+    Args:
+        event_type: Tipo a verificar
+    
+    Returns:
+        True se válido
+    
+    Example:
+        >>> is_valid_event_type("user_message")  # True
+        >>> is_valid_event_type("invalid")  # False
+    """
+    valid_types = {
+        "user_message", "assistant_response", "function_call", 
+        "function_result", "error", "system"
+    }
+    return event_type in valid_types
+
+def is_valid_tool_call_status(status: str) -> bool:
+    """
+    Verifica se um status de tool call é válido.
+    
+    Args:
+        status: Status a verificar
+    
+    Returns:
+        True se válido
+    
+    Example:
+        >>> is_valid_tool_call_status("success")  # True
+        >>> is_valid_tool_call_status("invalid")  # False
+    """
+    valid_statuses = {"pending", "success", "error"}
+    return status in valid_statuses
+
+# ============================================================================
+# UTILITÁRIOS DE CONVERSÃO
+# ============================================================================
+
+def thread_to_openai_messages(thread: Thread) -> list:
+    """
+    Converte thread para formato OpenAI.
+    
+    Args:
+        thread: Thread a converter
+    
+    Returns:
+        Lista de mensagens no formato OpenAI
+    
+    Example:
+        >>> thread = create_conversation_thread(create_user_message("Oi!"))
+        >>> messages = thread_to_openai_messages(thread)
+        >>> print(messages[0]["role"])  # "user"
+    """
+    return thread.to_openai_format()
+
+def messages_from_dict_list(messages_data: list) -> list:
+    """
+    Converte lista de dicts para lista de Messages.
+    
+    Args:
+        messages_data: Lista de dicionários de mensagens
+    
+    Returns:
+        Lista de objetos Message
+    
+    Example:
+        >>> data = [{"role": "user", "content": "Oi!", "timestamp": "2023-01-01T00:00:00"}]
+        >>> messages = messages_from_dict_list(data)
+        >>> print(type(messages[0]))  # <class 'models.models.Message'>
+    """
+    return [Message.from_dict(msg_data) for msg_data in messages_data]
+
+def thread_from_dict(thread_data: dict) -> Thread:
+    """
+    Converte dicionário para Thread.
+    
+    Args:
+        thread_data: Dados da thread
+    
+    Returns:
+        Objeto Thread
+    
+    Example:
+        >>> data = {"messages": [], "session_id": "test", ...}
+        >>> thread = thread_from_dict(data)
+        >>> print(type(thread))  # <class 'models.models.Thread'>
+    """
+    return Thread.from_dict(thread_data)
+
+# ============================================================================
+# UTILITÁRIOS DE ANÁLISE
+# ============================================================================
+
+def count_messages_by_role(thread: Thread) -> dict:
+    """
+    Conta mensagens por role.
+    
+    Args:
+        thread: Thread a analisar
+    
+    Returns:
+        Dicionário com contagem por role
+    
+    Example:
+        >>> thread = create_conversation_thread(
+        ...     create_user_message("Oi!"),
+        ...     create_assistant_message("Olá!")
+        ... )
+        >>> counts = count_messages_by_role(thread)
+        >>> print(counts)  # {"user": 1, "assistant": 1}
+    """
+    counts = {}
+    for message in thread.messages:
+        counts[message.role] = counts.get(message.role, 0) + 1
+    return counts
+
+def get_last_user_message(thread: Thread) -> Message:
+    """
+    Obtém a última mensagem do usuário.
+    
+    Args:
+        thread: Thread a analisar
+    
+    Returns:
+        Última mensagem do usuário ou None
+    
+    Example:
+        >>> thread = create_conversation_thread(create_user_message("Oi!"))
+        >>> last = get_last_user_message(thread)
+        >>> print(last.content)  # "Oi!"
+    """
+    for message in reversed(thread.messages):
+        if message.role == "user":
+            return message
+    return None
+
+def get_last_assistant_message(thread: Thread) -> Message:
+    """
+    Obtém a última mensagem do assistente.
+    
+    Args:
+        thread: Thread a analisar
+    
+    Returns:
+        Última mensagem do assistente ou None
+    
+    Example:
+        >>> thread = create_conversation_thread(
+        ...     create_user_message("Oi!"),
+        ...     create_assistant_message("Olá!")
+        ... )
+        >>> last = get_last_assistant_message(thread)
+        >>> print(last.content)  # "Olá!"
+    """
+    for message in reversed(thread.messages):
+        if message.role == "assistant":
+            return message
+    return None
+
+def calculate_thread_stats(thread: Thread) -> dict:
+    """
+    Calcula estatísticas de uma thread.
+    
+    Args:
+        thread: Thread a analisar
+    
+    Returns:
+        Dicionário com estatísticas
+    
+    Example:
+        >>> thread = create_conversation_thread(create_user_message("Test"))
+        >>> stats = calculate_thread_stats(thread)
+        >>> print(stats["total_messages"])  # 1
+    """
+    from datetime import datetime
+    
+    if not thread.messages:
+        return {
+            "total_messages": 0,
+            "total_tool_calls": len(thread.tools_calls),
+            "messages_by_role": {},
+            "duration_minutes": 0,
+            "estimated_tokens": 0
+        }
+    
+    # Contagem por role
+    messages_by_role = count_messages_by_role(thread)
+    
+    # Duração da conversa
+    first_message = thread.messages[0]
+    last_message = thread.messages[-1]
+    duration = (last_message.timestamp - first_message.timestamp).total_seconds() / 60
+    
+    # Estimativa de tokens (4 chars ≈ 1 token)
+    total_chars = sum(len(msg.content) for msg in thread.messages)
+    estimated_tokens = total_chars // 4
+    
+    return {
+        "total_messages": len(thread.messages),
+        "total_tool_calls": len(thread.tools_calls),
+        "messages_by_role": messages_by_role,
+        "duration_minutes": round(duration, 2),
+        "estimated_tokens": estimated_tokens,
+        "first_message_time": first_message.timestamp.isoformat(),
+        "last_message_time": last_message.timestamp.isoformat()
+    }
+
+# ============================================================================
+# RESULT MONAD UTILITIES
+# ============================================================================
+
+def safe_operation(func, *args, **kwargs) -> Result:
+    """
+    Executa operação com tratamento seguro de erros.
+    
+    Args:
+        func: Função a executar
+        *args: Argumentos posicionais
+        **kwargs: Argumentos nomeados
+    
+    Returns:
+        Result com resultado ou erro
+    
+    Example:
+        >>> def divide(a, b):
+        ...     return a / b
+        >>> result = safe_operation(divide, 10, 2)
+        >>> print(result.success)  # True
+        >>> print(result.data)     # 5.0
+        
+        >>> result = safe_operation(divide, 10, 0)
+        >>> print(result.success)  # False
+    """
+    try:
+        result = func(*args, **kwargs)
+        return Result.ok(result)
+    except Exception as e:
+        return Result.error(str(e))
+
+def chain_results(*operations) -> Result:
+    """
+    Encadeia múltiplas operações que retornam Result.
+    Para na primeira falha.
+    
+    Args:
+        *operations: Funções que retornam Result
+    
+    Returns:
+        Result final ou primeiro erro
+    
+    Example:
+        >>> def op1(): return Result.ok(10)
+        >>> def op2(x): return Result.ok(x * 2)
+        >>> def op3(x): return Result.ok(x + 5)
+        >>> 
+        >>> result = chain_results(op1, op2, op3)
+        >>> print(result.data)  # 25
+    """
+    result = None
+    
+    for i, operation in enumerate(operations):
+        if i == 0:
+            # Primeira operação (sem argumentos)
+            result = operation()
+        else:
+            # Operações subsequentes recebem resultado anterior
+            if not result.success:
+                return result
+            result = operation(result.data)
+    
+    return result or Result.error("Nenhuma operação fornecida")
+
+def collect_results(results: list) -> Result:
+    """
+    Coleta múltiplos Results em uma lista.
+    Falha se qualquer um falhar.
+    
+    Args:
+        results: Lista de objetos Result
+    
+    Returns:
+        Result com lista de dados ou primeiro erro
+    
+    Example:
+        >>> results = [Result.ok(1), Result.ok(2), Result.ok(3)]
+        >>> collected = collect_results(results)
+        >>> print(collected.data)  # [1, 2, 3]
+    """
+    data_list = []
+    
+    for result in results:
+        if not result.success:
+            return result
+        data_list.append(result.data)
+    
+    return Result.ok(data_list)
+
+# ============================================================================
+# SERIALIZAÇÃO E EXPORTAÇÃO
+# ============================================================================
+
+def export_thread_to_dict(thread: Thread, include_metadata: bool = True) -> dict:
+    """
+    Exporta thread para dicionário completo.
+    
+    Args:
+        thread: Thread a exportar
+        include_metadata: Incluir metadados calculados
+    
+    Returns:
+        Dicionário com dados da thread
+    
+    Example:
+        >>> thread = create_empty_thread("test")
+        >>> data = export_thread_to_dict(thread)
+        >>> print(data["session_id"])  # "test"
+    """
+    data = thread.to_dict()
+    
+    if include_metadata:
+        data["metadata"] = calculate_thread_stats(thread)
+    
+    return data
+
+def import_thread_from_dict(data: dict) -> Result:
+    """
+    Importa thread de dicionário com validação.
+    
+    Args:
+        data: Dados da thread
+    
+    Returns:
+        Result com Thread ou erro
+    
+    Example:
+        >>> data = {"session_id": "test", "messages": [], ...}
+        >>> result = import_thread_from_dict(data)
+        >>> if result.success:
+        ...     thread = result.data
+    """
+    try:
+        thread = Thread.from_dict(data)
+        return Result.ok(thread)
+    except Exception as e:
+        return Result.error(f"Erro ao importar thread: {str(e)}")
+
+# ============================================================================
+# FILTROS E TRANSFORMAÇÕES
+# ============================================================================
+
+def filter_messages_by_role(thread: Thread, role: str) -> list:
+    """
+    Filtra mensagens por role específico.
+    
+    Args:
+        thread: Thread a filtrar
+        role: Role desejado
+    
+    Returns:
+        Lista de mensagens filtradas
+    
+    Example:
+        >>> thread = create_conversation_thread(
+        ...     create_user_message("Oi!"),
+        ...     create_assistant_message("Olá!")
+        ... )
+        >>> user_msgs = filter_messages_by_role(thread, "user")
+        >>> print(len(user_msgs))  # 1
+    """
+    return [msg for msg in thread.messages if msg.role == role]
+
+def filter_messages_by_content(thread: Thread, keyword: str) -> list:
+    """
+    Filtra mensagens que contêm palavra-chave.
+    
+    Args:
+        thread: Thread a filtrar
+        keyword: Palavra-chave a buscar
+    
+    Returns:
+        Lista de mensagens filtradas
+    
+    Example:
+        >>> thread = create_conversation_thread(create_user_message("Como calcular?"))
+        >>> msgs = filter_messages_by_content(thread, "calcular")
+        >>> print(len(msgs))  # 1
+    """
+    return [
+        msg for msg in thread.messages 
+        if keyword.lower() in msg.content.lower()
+    ]
+
+def get_recent_messages(thread: Thread, minutes: int = 60) -> list:
+    """
+    Obtém mensagens recentes dentro de um período.
+    
+    Args:
+        thread: Thread a filtrar
+        minutes: Minutos para trás
+    
+    Returns:
+        Lista de mensagens recentes
+    
+    Example:
+        >>> from datetime import datetime, timedelta
+        >>> # Assuming messages within last hour
+        >>> recent = get_recent_messages(thread, 60)
+    """
+    from datetime import datetime, timedelta
+    
+    cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+    return [
+        msg for msg in thread.messages 
+        if msg.timestamp >= cutoff
+    ]
+
+def transform_thread_content(thread: Thread, transformer_func) -> Thread:
+    """
+    Transforma conteúdo das mensagens usando função.
+    
+    Args:
+        thread: Thread original
+        transformer_func: Função de transformação
+    
+    Returns:
+        Nova thread com conteúdo transformado
+    
+    Example:
+        >>> def uppercase(content):
+        ...     return content.upper()
+        >>> new_thread = transform_thread_content(thread, uppercase)
+    """
+    new_messages = []
+    
+    for msg in thread.messages:
+        transformed_content = transformer_func(msg.content)
+        new_msg = Message(
+            role=msg.role,
+            content=transformed_content,
+            timestamp=msg.timestamp,
+            function_call=msg.function_call,
+            name=msg.name
+        )
+        new_messages.append(new_msg)
+    
+    return Thread(
+        messages=new_messages,
+        tools_calls=thread.tools_calls,
+        session_id=thread.session_id,
+        created_at=thread.created_at,
+        updated_at=thread.updated_at
+    )
+
+# ============================================================================
+# VALIDADORES AVANÇADOS
+# ============================================================================
+
+def validate_thread_integrity(thread: Thread) -> Result:
+    """
+    Valida integridade completa de uma thread.
+    
+    Args:
+        thread: Thread a validar
+    
+    Returns:
+        Result com informações de validação
+    
+    Example:
+        >>> thread = create_empty_thread()
+        >>> result = validate_thread_integrity(thread)
+        >>> print(result.success)  # True
+    """
+    errors = []
+    warnings = []
+    
+    # Validações básicas
+    if not thread.session_id:
+        errors.append("session_id é obrigatório")
+    
+    if thread.updated_at < thread.created_at:
+        errors.append("updated_at não pode ser anterior a created_at")
+    
+    # Validar mensagens
+    for i, msg in enumerate(thread.messages):
+        if not is_valid_message_role(msg.role):
+            errors.append(f"Mensagem {i+1}: role inválido '{msg.role}'")
+        
+        if not msg.content and not msg.function_call:
+            errors.append(f"Mensagem {i+1}: deve ter content ou function_call")
+        
+        if msg.role == "function" and not msg.name:
+            errors.append(f"Mensagem {i+1}: mensagens de função devem ter 'name'")
+    
+    # Validar ordem temporal
+    if len(thread.messages) > 1:
+        for i in range(1, len(thread.messages)):
+            current = thread.messages[i]
+            previous = thread.messages[i-1]
+            
+            if current.timestamp < previous.timestamp:
+                warnings.append(f"Mensagem {i+1} tem timestamp anterior à {i}")
+    
+    # Validar tool calls
+    for i, tc in enumerate(thread.tools_calls):
+        if not is_valid_tool_call_status(tc.status):
+            errors.append(f"Tool call {i+1}: status inválido '{tc.status}'")
+        
+        if tc.status == "error" and not tc.error:
+            errors.append(f"Tool call {i+1}: status 'error' deve ter campo 'error'")
+    
+    if errors:
+        return Result.error({
+            "valid": False,
+            "errors": errors,
+            "warnings": warnings
+        })
+    
+    return Result.ok({
+        "valid": True,
+        "errors": [],
+        "warnings": warnings,
+        "message_count": len(thread.messages),
+        "tool_call_count": len(thread.tools_calls)
+    })
+
+# ============================================================================
+# LISTA DE EXPORTAÇÕES PÚBLICAS
+# ============================================================================
+
+__all__ = [
+    # Types
+    "MessageRole",
+    "EventType", 
+    "ToolCallStatus",
+    
+    # Core classes
+    "Message",
+    "ToolCall",
+    "Event",
+    "Thread",
+    "Result",
+    
+    # Factory functions
+    "create_user_message",
+    "create_assistant_message",
+    "create_system_message",
+    "create_function_message",
+    "create_empty_thread",
+    "create_conversation_thread",
+    "create_info_event",
+    "create_error_event",
+    
+    # Validation utilities
+    "is_valid_message_role",
+    "is_valid_event_type",
+    "is_valid_tool_call_status",
+    "validate_thread_integrity",
+    
+    # Conversion utilities
+    "thread_to_openai_messages",
+    "messages_from_dict_list",
+    "thread_from_dict",
+    "export_thread_to_dict",
+    "import_thread_from_dict",
+    
+    # Analysis utilities
+    "count_messages_by_role",
+    "get_last_user_message",
+    "get_last_assistant_message",
+    "calculate_thread_stats",
+    
+    # Result monad utilities
+    "safe_operation",
+    "chain_results",
+    "collect_results",
+    
+    # Filter and transform utilities
+    "filter_messages_by_role",
+    "filter_messages_by_content",
+    "get_recent_messages",
+    "transform_thread_content",
+    
+    # Metadata
+    "__version__",
+    "__author__",
+    "__description__"
+]
