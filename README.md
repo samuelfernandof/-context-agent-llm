@@ -53,7 +53,7 @@ context-agent-llm/
 
 1. **Clone este repositório:**
     ```bash
-    git clone https://github.com/seu-usuario/context-agent-llm.git
+    git clone https://github.com/samuelfernandof/context-agent-llm
     cd context-agent-llm
     ```
 
