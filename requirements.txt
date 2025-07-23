@@ -1,3 +1,142 @@
-openai
-pyyaml
-python-dotenv
+# ============================================================================
+# DEPENDÊNCIAS DE DESENVOLVIMENTO
+# ============================================================================
+
+# Inclui dependências principais
+-r requirements.txt
+
+# ============================================================================
+# TESTES E QUALIDADE DE CÓDIGO
+# ============================================================================
+
+# Framework de testes
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.21.1
+pytest-mock>=3.11.1
+pytest-xdist>=3.3.1  # Testes paralelos
+
+# Cobertura de código
+coverage>=7.3.0
+
+# Linting e formatação
+black>=23.7.0
+flake8>=6.0.4
+isort>=5.12.4
+pylint>=2.17.5
+
+# Checagem de tipos
+mypy>=1.5.1
+types-PyYAML>=6.0.12.11
+
+# Análise de segurança
+bandit>=1.7.5
+safety>=2.3.5
+
+# ============================================================================
+# DOCUMENTAÇÃO
+# ============================================================================
+
+# Geração de documentação
+sphinx>=7.1.2
+sphinx-rtd-theme>=1.3.0
+myst-parser>=2.0.0  # Markdown support
+
+# Documentação de código
+pydocstyle>=6.3.0
+
+# ============================================================================
+# FERRAMENTAS DE DESENVOLVIMENTO
+# ============================================================================
+
+# Jupyter para prototipagem
+jupyter>=1.0.0
+notebook>=6.5.4
+
+# Debugging avançado
+ipdb>=0.13.13
+pdb-clone>=2.3.0
+
+# Profiling de performance
+memory-profiler>=0.61.0
+line-profiler>=4.1.1
+
+# Pre-commit hooks
+pre-commit>=3.3.3
+
+# ============================================================================
+# UTILITÁRIOS DE BUILD E DEPLOY
+# ============================================================================
+
+# Build de pacotes
+build>=0.10.0
+wheel>=0.41.1
+
+# Publicação no PyPI
+twine>=4.0.2
+
+# Gerenciamento de dependências
+pip-tools>=7.1.0
+
+# ============================================================================
+# FERRAMENTAS DE ANÁLISE
+# ============================================================================
+
+# Análise de complexidade
+radon>=6.0.1
+xenon>=0.9.0
+
+# Análise de importações
+importlib-metadata>=6.8.0
+
+# ============================================================================
+# CONFIGURAÇÃO DO PRE-COMMIT
+# ============================================================================
+
+# Para usar pre-commit hooks, crie .pre-commit-config.yaml:
+#
+# repos:
+#   - repo: https://github.com/psf/black
+#     rev: 23.7.0
+#     hooks:
+#       - id: black
+#   - repo: https://github.com/pycqa/isort
+#     rev: 5.12.4
+#     hooks:
+#       - id: isort
+#   - repo: https://github.com/pycqa/flake8
+#     rev: 6.0.4
+#     hooks:
+#       - id: flake8
+#   - repo: https://github.com/pre-commit/mirrors-mypy
+#     rev: v1.5.1
+#     hooks:
+#       - id: mypy
+
+# ============================================================================
+# COMANDOS ÚTEIS
+# ============================================================================
+
+# Instalar dependências de desenvolvimento:
+# pip install -r requirements-dev.txt
+
+# Executar testes:
+# pytest tests/ -v --cov=agent --cov=models
+
+# Formatação de código:
+# black agent/ models/ tests/ main.py
+# isort agent/ models/ tests/ main.py
+
+# Linting:
+# flake8 agent/ models/ tests/ main.py
+# pylint agent/ models/ tests/ main.py
+
+# Checagem de tipos:
+# mypy agent/ models/ main.py
+
+# Análise de segurança:
+# bandit -r agent/ models/ main.py
+# safety check
+
+# Gerar documentação:
+# sphinx-build -b html docs/ docs/_build/html
